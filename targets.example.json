@@ -1,0 +1,9 @@
+[
+  {
+    "repo": "test",
+    "enabled": true,
+    "locations": ["/path/to/files"],
+    "retention": { "keepWithin": "1m" },
+    "checkWeekly": true
+  }
+]
