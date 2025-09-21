@@ -61,10 +61,8 @@ B2_BUCKET_NAME=my-b2-bucket
 B2_ACCOUNT_ID=your_b2_account_id
 B2_ACCOUNT_KEY=your_b2_account_key
 
-# Restic password (required - pick one)
+# Restic password (required)
 RESTIC_PASSWORD=supersecret
-# or
-# RESTIC_PASSWORD_FILE=/path/to/password/file
 
 # Telegram notifications (optional)
 # TELEGRAM_BOT_TOKEN=123456:ABCDEF...

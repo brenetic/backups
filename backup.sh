@@ -11,15 +11,9 @@ if [[ -f "$ENV_FILE" ]]; then set -a; source "$ENV_FILE"; set +a; fi
 : "${B2_BUCKET_NAME:?B2_BUCKET_NAME is required}"
 : "${B2_ACCOUNT_ID:?B2_ACCOUNT_ID is required}"
 : "${B2_ACCOUNT_KEY:?B2_ACCOUNT_KEY is required}"
+: "${RESTIC_PASSWORD:?RESTIC_PASSWORD is required}"
 
-RESTIC_AUTH_ARGS=()
-if [[ -n "${RESTIC_PASSWORD_FILE:-}" ]]; then
-  RESTIC_AUTH_ARGS+=(--password-file "$RESTIC_PASSWORD_FILE")
-elif [[ -n "${RESTIC_PASSWORD:-}" ]]; then
-  RESTIC_AUTH_ARGS+=(--password-command 'echo "$RESTIC_PASSWORD"')
-else
-  echo "[ERROR] RESTIC_PASSWORD[_FILE] is required" >&2; exit 1
-fi
+
 
 command -v restic >/dev/null || { echo "[ERROR] restic not found"; exit 1; }
 command -v jq     >/dev/null || { echo "[ERROR] jq not found"; exit 1; }
@@ -52,11 +46,15 @@ build_repo_url() {
 }
 ensure_repo() {
   local repo_url="$1"
-  if restic -r "$repo_url" "${RESTIC_AUTH_ARGS[@]}" cat config >/dev/null 2>&1; then
+  if restic -r "$repo_url" cat config >/dev/null 2>&1; then
     return 0
   fi
   tg "ℹ️ Initialising repo → $repo_url"
-  restic -r "$repo_url" "${RESTIC_AUTH_ARGS[@]}" init >/tmp/restic_init.log 2>&1 || {
+  restic -r "$repo_url" init >/tmp/restic_init.log 2>&1 || {
+    if grep -q "already initialized" /tmp/restic_init.log 2>/dev/null; then
+      tg "ℹ️ Repo already initialized → $repo_url"
+      return 0
+    fi
     tg "❌ Repo init failed for $repo_url\n$(tail -n 60 /tmp/restic_init.log || true)"; return 1; }
 }
 
@@ -77,7 +75,7 @@ run_retention() {
     esac
   done < <(echo "$retention_json" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
   local out rc=0
-  if ! out="$(restic -r "$repo_url" "${RESTIC_AUTH_ARGS[@]}" forget --prune "${args[@]}" 2>&1)"; then
+  if ! out="$(restic -r "$repo_url" forget --prune "${args[@]}" 2>&1)"; then
     rc=$?; tg "⚠️ Retention failed for $repo_url (exit $rc)\n$(echo "$out" | tail -n 60)"; return $rc
   fi
   tg "🧹 Retention ok for $repo_url\n$(echo "$out" | tail -n 30)"
@@ -103,7 +101,7 @@ backup_target() {
 
   tg "📦 Backup → $name\n$(printf '• %s\n' "${paths[@]}")"
   local out rc
-  if ! out="$(restic -r "$repo_url" "${RESTIC_AUTH_ARGS[@]}" backup "${paths[@]}" --host "$HOSTNAME_SHORT" 2>&1)"; then
+  if ! out="$(restic -r "$repo_url" backup "${paths[@]}" --host "$HOSTNAME_SHORT" 2>&1)"; then
     rc=$?
   else
     rc=0
@@ -117,7 +115,7 @@ backup_target() {
   run_retention "$repo_url" "$retention_json" || true
 
   if [[ "$(date +%u)" == "7" ]] && [[ "$(echo "$target_json" | jq -r '.checkWeekly // false')" == "true" ]]; then
-    local ck; if ck="$(restic -r "$repo_url" "${RESTIC_AUTH_ARGS[@]}" check 2>&1)"; then
+    local ck; if ck="$(restic -r "$repo_url" check 2>&1)"; then
       tg "🧪 Check ok for $name"
     else
       tg "⚠️ Check failed for $name\n$(echo "$ck" | tail -n 60)"
