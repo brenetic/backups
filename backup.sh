@@ -55,7 +55,8 @@ ensure_repo() {
       tg "ℹ️ Repo already initialized → $repo_url"
       return 0
     fi
-    tg "❌ Repo init failed for $repo_url\n$(tail -n 60 /tmp/restic_init.log || true)"; return 1; }
+    tg "❌ Repo init failed for $repo_url
+$(tail -n 60 /tmp/restic_init.log || true)"; return 1; }
 }
 
 run_retention() {
@@ -76,9 +77,11 @@ run_retention() {
   done < <(echo "$retention_json" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
   local out rc=0
   if ! out="$(restic -r "$repo_url" forget --prune "${args[@]}" 2>&1)"; then
-    rc=$?; tg "⚠️ Retention failed for $repo_url (exit $rc)\n$(echo "$out" | tail -n 60)"; return $rc
+    rc=$?;     tg "⚠️ Retention failed for $repo_url (exit $rc)
+$(echo "$out" | tail -n 60)"; return $rc
   fi
-  tg "🧹 Retention ok for $repo_url\n$(echo "$out" | tail -n 30)"
+  tg "🧹 Retention ok for $repo_url
+$(echo "$out" | tail -n 30)"
 }
 
 backup_target() {
@@ -99,7 +102,8 @@ backup_target() {
   local repo_url; repo_url="$(build_repo_url "$name")"
   ensure_repo "$repo_url"
 
-  tg "📦 Backup → $name\n$(printf '• %s\n' "${paths[@]}")"
+  tg "📦 Backup → $name
+$(printf '• %s\n' "${paths[@]}")"
   local out rc
   if ! out="$(restic -r "$repo_url" backup "${paths[@]}" --host "$HOSTNAME_SHORT" 2>&1)"; then
     rc=$?
@@ -107,9 +111,12 @@ backup_target() {
     rc=0
   fi
   case "$rc" in
-    0) tg "✅ Backup completed for $name\n$(echo "$out" | tail -n 30)";;
-    3) tg "⚠️ Backup completed with unreadable files for $name (exit 3)\n$(echo "$out" | tail -n 60)";;
-    *) tg "❌ Backup failed for $name (exit $rc)\n$(echo "$out" | tail -n 60)"; return "$rc";;
+    0) tg "✅ Backup completed for $name
+$(echo "$out" | tail -n 30)";;
+    3) tg "⚠️ Backup completed with unreadable files for $name (exit 3)
+$(echo "$out" | tail -n 60)";;
+    *) tg "❌ Backup failed for $name (exit $rc)
+$(echo "$out" | tail -n 60)"; return "$rc";;
   esac
 
   run_retention "$repo_url" "$retention_json" || true
@@ -118,7 +125,8 @@ backup_target() {
     local ck; if ck="$(restic -r "$repo_url" check 2>&1)"; then
       tg "🧪 Check ok for $name"
     else
-      tg "⚠️ Check failed for $name\n$(echo "$ck" | tail -n 60)"
+      tg "⚠️ Check failed for $name
+$(echo "$ck" | tail -n 60)"
     fi
   fi
 }
@@ -137,9 +145,13 @@ main() {
 
   local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
   if (( failed == 0 )); then
-    tg "✅ Backup finished @ $end_ts\nProcessed: $processed / $total\nFailed: $failed"
+    tg "✅ Backup finished @ $end_ts
+Processed: $processed / $total
+Failed: $failed"
   else
-    tg "❌ Backup finished with errors @ $end_ts\nProcessed: $processed / $total\nFailed: $failed"
+    tg "❌ Backup finished with errors @ $end_ts
+Processed: $processed / $total
+Failed: $failed"
   fi
 }
 main "$@"
