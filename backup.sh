@@ -13,8 +13,6 @@ if [[ -f "$ENV_FILE" ]]; then set -a; source "$ENV_FILE"; set +a; fi
 : "${B2_ACCOUNT_KEY:?B2_ACCOUNT_KEY is required}"
 : "${RESTIC_PASSWORD:?RESTIC_PASSWORD is required}"
 
-
-
 command -v restic >/dev/null || { echo "[ERROR] restic not found"; exit 1; }
 command -v jq     >/dev/null || { echo "[ERROR] jq not found"; exit 1; }
 command -v curl   >/dev/null || { echo "[WARN] curl missing; Telegram disabled"; }
@@ -44,6 +42,27 @@ build_repo_url() {
   local name="$1"
   echo "b2:${B2_BUCKET_NAME}:$name"
 }
+
+repo_lock_status() {
+  local repo_url="$1"
+  local ids
+  if ! ids="$(restic -r "$repo_url" list locks --no-lock 2>/dev/null | awk '{print $1}')" ; then
+    echo "free"; return 0
+  fi
+  [[ -z "$ids" ]] && { echo "free"; return 0; }
+
+  local recent=0
+  for id in $ids; do
+    local ts
+    ts="$(restic -r "$repo_url" cat lock "$id" --json 2>/dev/null | jq -r '.time // empty')" || ts=""
+    if [[ -z "$ts" ]]; then recent=1; break; fi
+    if jq -e -n --arg t "$ts" 'now - ($t|fromdateiso8601) < 1800' >/dev/null; then
+      recent=1; break
+    fi
+  done
+  (( recent == 1 )) && echo "active" || echo "stale"
+}
+
 ensure_repo() {
   local repo_url="$1"
   if restic -r "$repo_url" cat config >/dev/null 2>&1; then
@@ -77,7 +96,7 @@ run_retention() {
   done < <(echo "$retention_json" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
   local out rc=0
   if ! out="$(restic -r "$repo_url" forget --prune "${args[@]}" 2>&1)"; then
-    rc=$?;     tg "⚠️ Retention failed for $repo_url (exit $rc)
+    rc=$?; tg "⚠️ Retention failed for $repo_url (exit $rc)
 $(echo "$out" | tail -n 60)"; return $rc
   fi
   tg "🧹 Retention ok for $repo_url
@@ -101,6 +120,22 @@ backup_target() {
 
   local repo_url; repo_url="$(build_repo_url "$name")"
   ensure_repo "$repo_url"
+
+  case "$(repo_lock_status "$repo_url")" in
+    active)
+      tg "🔒 Repo $name is currently locked (active). Skipping this repo."
+      return 0
+      ;;
+    stale)
+      tg "🧹 Stale locks detected for $name — attempting unlock"
+      restic -r "$repo_url" unlock >/dev/null 2>&1 || true
+      if [[ "$(repo_lock_status "$repo_url")" != "free" ]]; then
+        tg "🔒 Repo $name still locked after unlock attempt. Skipping."
+        return 0
+      fi
+      ;;
+    free) : ;;
+  esac
 
   tg "📦 Backup → $name
 $(printf '• %s\n' "${paths[@]}")"
