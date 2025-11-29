@@ -34,7 +34,7 @@ tg() {
 
 on_error() {
   local ec=$? line=${BASH_LINENO[0]:-?} cmd=${BASH_COMMAND:-?}
-  tg "❌ Backup aborted (exit $ec) at line $line: $cmd"; exit $ec
+  tg "[ERROR] Backup aborted (exit $ec) at line $line: $cmd"; exit $ec
 }
 trap on_error ERR INT TERM
 
@@ -68,13 +68,13 @@ ensure_repo() {
   if restic -r "$repo_url" cat config >/dev/null 2>&1; then
     return 0
   fi
-  tg "ℹ️ Initialising repo → $repo_url"
+   tg "[INFO] Initialising repo -> $repo_url"
   restic -r "$repo_url" init >/tmp/restic_init.log 2>&1 || {
     if grep -q "already initialized" /tmp/restic_init.log 2>/dev/null; then
-      tg "ℹ️ Repo already initialized → $repo_url"
+       tg "[INFO] Repo already initialized -> $repo_url"
       return 0
     fi
-    tg "❌ Repo init failed for $repo_url
+     tg "[ERROR] Repo init failed for $repo_url
 $(tail -n 60 /tmp/restic_init.log || true)"; return 1; }
 }
 
@@ -96,10 +96,10 @@ run_retention() {
   done < <(echo "$retention_json" | jq -r 'to_entries[] | "\(.key)=\(.value)"')
   local out rc=0
   if ! out="$(restic -r "$repo_url" forget --prune "${args[@]}" 2>&1)"; then
-    rc=$?; tg "⚠️ Retention failed for $repo_url (exit $rc)
+     rc=$?; tg "[WARN] Retention failed for $repo_url (exit $rc)
 $(echo "$out" | tail -n 60)"; return $rc
-  fi
-  tg "🧹 Retention ok for $repo_url
+   fi
+   tg "[OK] Retention ok for $repo_url
 $(echo "$out" | tail -n 30)"
 }
 
@@ -118,61 +118,61 @@ backup_target() {
     [[ -z "$p" ]] && continue
     [[ -e "$p" ]] && paths+=("$p") || echo "[WARN] Missing path: $p" >&2
   done < <(echo "$target_json" | jq -r '.locations[] | if type=="string" then . else .path end')
-  [[ ${#paths[@]} -eq 0 ]] && { tg "⚠️ No valid paths for repo $name — skipping"; return 0; }
+   [[ ${#paths[@]} -eq 0 ]] && { tg "[WARN] No valid paths for repo $name -- skipping"; return 0; }
 
   local repo_url; repo_url="$(build_repo_url "$name")"
   ensure_repo "$repo_url"
 
-  case "$(repo_lock_status "$repo_url")" in
-    active)
-      tg "🔒 Repo $name is currently locked (active). Skipping this repo."
-      return 0
-      ;;
-    stale)
-      tg "🧹 Stale locks detected for $name — attempting unlock"
-      restic -r "$repo_url" unlock >/dev/null 2>&1 || true
-      if [[ "$(repo_lock_status "$repo_url")" != "free" ]]; then
-        tg "🔒 Repo $name still locked after unlock attempt. Skipping."
-        return 0
-      fi
-      ;;
-    free) : ;;
-  esac
+   case "$(repo_lock_status "$repo_url")" in
+     active)
+       tg "[LOCK] Repo $name is currently locked (active). Skipping this repo."
+       return 0
+       ;;
+     stale)
+       tg "[OK] Stale locks detected for $name -- attempting unlock"
+       restic -r "$repo_url" unlock >/dev/null 2>&1 || true
+       if [[ "$(repo_lock_status "$repo_url")" != "free" ]]; then
+         tg "[LOCK] Repo $name still locked after unlock attempt. Skipping."
+         return 0
+       fi
+       ;;
+     free) : ;;
+   esac
 
-  tg "📦 Backup → $name
-$(printf '• %s\n' "${paths[@]}")"
+   tg "[BACKUP] Backup -> $name
+$(printf '  %s\n' "${paths[@]}")"
   local out rc
   if ! out="$(restic -r "$repo_url" backup "${paths[@]}" --host "$HOSTNAME_SHORT" 2>&1)"; then
     rc=$?
   else
     rc=0
   fi
-  case "$rc" in
-    0) tg "✅ Backup completed for $name
+   case "$rc" in
+     0) tg "[OK] Backup completed for $name
 $(echo "$out" | tail -n 30)";;
-    3) tg "⚠️ Backup completed with unreadable files for $name (exit 3)
+     3) tg "[WARN] Backup completed with unreadable files for $name (exit 3)
 $(echo "$out" | tail -n 60)";;
-    *) tg "❌ Backup failed for $name (exit $rc)
+     *) tg "[ERROR] Backup failed for $name (exit $rc)
 $(echo "$out" | tail -n 60)"; return "$rc";;
-  esac
+   esac
 
   run_retention "$repo_url" "$retention_json" || true
 
   if [[ "$(date +%u)" == "7" ]] && [[ "$(echo "$target_json" | jq -r '.checkWeekly // false')" == "true" ]]; then
-    local ck; if ck="$(restic -r "$repo_url" check 2>&1)"; then
-      tg "🧪 Check ok for $name"
-    else
-      tg "⚠️ Check failed for $name
+     local ck; if ck="$(restic -r "$repo_url" check 2>&1)"; then
+       tg "[OK] Check ok for $name"
+     else
+       tg "[WARN] Check failed for $name
 $(echo "$ck" | tail -n 60)"
     fi
   fi
 }
 
 main() {
-  [[ -f "$TARGETS_FILE" ]] || { tg "❌ targets.json not found at $TARGETS_FILE"; exit 1; }
-  jq empty "$TARGETS_FILE" >/dev/null || { tg "❌ targets.json is invalid JSON"; exit 1; }
+   [[ -f "$TARGETS_FILE" ]] || { tg "[ERROR] targets.json not found at $TARGETS_FILE"; exit 1; }
+   jq empty "$TARGETS_FILE" >/dev/null || { tg "[ERROR] targets.json is invalid JSON"; exit 1; }
 
-  tg "🗄️ Backup started @ $(date '+%Y-%m-%d %H:%M:%S') on $HOSTNAME_SHORT"
+   tg "[START] Backup started @ $(date '+%Y-%m-%d %H:%M:%S') on $HOSTNAME_SHORT"
 
   local total processed=0 failed=0
   total="$(jq 'length' "$TARGETS_FILE")"
@@ -180,16 +180,16 @@ main() {
     if backup_target "$target"; then ((processed++)) || true; else ((failed++)) || true; fi
   done < <(jq -c '.[]' "$TARGETS_FILE")
 
-  local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
-  if (( failed == 0 )); then
-    tg "✅ Backup finished @ $end_ts
+   local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+   if (( failed == 0 )); then
+     tg "[OK] Backup finished @ $end_ts
 Processed: $processed / $total
 Failed: $failed"
-  else
-    tg "❌ Backup finished with errors @ $end_ts
+   else
+     tg "[ERROR] Backup finished with errors @ $end_ts
 Processed: $processed / $total
 Failed: $failed"
-  fi
+   fi
 }
 main "$@"
 

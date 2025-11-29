@@ -31,7 +31,7 @@ tg() {
 
 on_error() {
   local ec=$? line=${BASH_LINENO[0]:-?} cmd=${BASH_COMMAND:-?}
-  tg "❌ Backup aborted (exit $ec) at line $line: $cmd"; exit $ec
+  tg "[ERROR] Backup aborted (exit $ec) at line $line: $cmd"; exit $ec
 }
 trap on_error ERR INT TERM
 
@@ -84,15 +84,15 @@ backup_target() {
     [[ -z "$p" ]] && continue
     [[ -e "$p" ]] && paths+=("$p") || echo "[WARN] Missing path: $p" >&2
   done < <(echo "$target_json" | jq -r '.locations[] | if type=="string" then . else .path end')
-  [[ ${#paths[@]} -eq 0 ]] && { tg "⚠️ No valid paths for local backup $name — skipping"; return 0; }
+   [[ ${#paths[@]} -eq 0 ]] && { tg "[WARN] No valid paths for local backup $name -- skipping"; return 0; }
 
   # Just in case
   mkdir -p "$LOCAL_BACKUP_ROOT"
   local target_backup_dir="${LOCAL_BACKUP_ROOT}/${name}"
   mkdir -p "$target_backup_dir"
 
-   tg "📦 Local Backup → $name
-$(printf '• %s\n' "${paths[@]}")"
+    tg "[BACKUP] Local backup -> $name
+$(printf '  %s\n' "${paths[@]}")"
 
    local out rc=0
 
@@ -100,25 +100,25 @@ $(printf '• %s\n' "${paths[@]}")"
      rc=$?
    fi
 
-   case "$rc" in
-     0) tg "✅ Local backup completed for $name
+    case "$rc" in
+      0) tg "[OK] Local backup completed for $name
 $(echo "$out" | tail -n 20)";;
-     *) tg "❌ Local backup failed for $name (exit $rc)
+      *) tg "[ERROR] Local backup failed for $name (exit $rc)
 $(echo "$out" | tail -n 30)"; return "$rc";;
-   esac
+    esac
 
-   tg "🧹 Pruning files older than 60 days that don't exist on source for $name"
-   local deleted_count
-   deleted_count="$(prune_old_backups "$target_backup_dir")"
-   tg "ℹ️ Deleted $deleted_count old files from backup of $name"
+    tg "[OK] Pruning files older than 60 days that don't exist on source for $name"
+    local deleted_count
+    deleted_count="$(prune_old_backups "$target_backup_dir")"
+    tg "[INFO] Deleted $deleted_count old files from backup of $name"
 }
 
 main() {
-  [[ -f "$TARGETS_FILE" ]] || { tg "❌ targets.json not found at $TARGETS_FILE"; exit 1; }
-  jq empty "$TARGETS_FILE" >/dev/null || { tg "❌ targets.json is invalid JSON"; exit 1; }
+   [[ -f "$TARGETS_FILE" ]] || { tg "[ERROR] targets.json not found at $TARGETS_FILE"; exit 1; }
+   jq empty "$TARGETS_FILE" >/dev/null || { tg "[ERROR] targets.json is invalid JSON"; exit 1; }
 
-  tg "🗄️ Local backup started @ $(date '+%Y-%m-%d %H:%M:%S') on $HOSTNAME_SHORT
-📂 Backup root: $LOCAL_BACKUP_ROOT"
+   tg "[START] Local backup started @ $(date '+%Y-%m-%d %H:%M:%S') on $HOSTNAME_SHORT
+[INFO] Backup root: $LOCAL_BACKUP_ROOT"
 
   local total processed=0 failed=0
   total="$(jq 'length' "$TARGETS_FILE")"
@@ -126,15 +126,15 @@ main() {
     if backup_target "$target"; then ((processed++)) || true; else ((failed++)) || true; fi
   done < <(jq -c '.[]' "$TARGETS_FILE")
 
-  local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
-  if (( failed == 0 )); then
-    tg "✅ Local backup finished @ $end_ts
+   local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+   if (( failed == 0 )); then
+     tg "[OK] Local backup finished @ $end_ts
 Processed: $processed / $total
 Failed: $failed"
-  else
-    tg "❌ Local backup finished with errors @ $end_ts
+   else
+     tg "[ERROR] Local backup finished with errors @ $end_ts
 Processed: $processed / $total
 Failed: $failed"
-  fi
+   fi
 }
 main "$@"
