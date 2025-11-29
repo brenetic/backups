@@ -105,11 +105,13 @@ $(echo "$out" | tail -n 30)"
 
 backup_target() {
   local target_json="$1"
-  local name enabled retention_json
-  name="$(echo "$target_json"    | jq -r '.repo')"
+  local name enabled offsite_enabled retention_json
+  name="$(echo "$target_json"    | jq -r '.name')"
   enabled="$(echo "$target_json" | jq -r '.enabled // true')"
+  offsite_enabled="$(echo "$target_json" | jq -r '.offsite // false')"
   retention_json="$(echo "$target_json" | jq -c '.retention // null')"
   [[ "$enabled" != "true" ]] && { echo "[SKIP] $name (disabled)" >&2; return 0; }
+  [[ "$offsite_enabled" != "true" ]] && { echo "[SKIP] $name (offsite backup disabled)" >&2; return 0; }
 
   local paths=()
   while IFS= read -r p; do
