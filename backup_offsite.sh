@@ -172,24 +172,35 @@ main() {
    [[ -f "$TARGETS_FILE" ]] || { tg "[ERROR] targets.json not found at $TARGETS_FILE"; exit 1; }
    jq empty "$TARGETS_FILE" >/dev/null || { tg "[ERROR] targets.json is invalid JSON"; exit 1; }
 
-   tg "[START] Backup started @ $(date '+%Y-%m-%d %H:%M:%S') on $HOSTNAME_SHORT"
+   local start_ts start_epoch
+   start_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+   start_epoch="$(date '+%s')"
+   tg "[START] Backup started @ $start_ts on $HOSTNAME_SHORT"
 
-  local total processed=0 failed=0
-  total="$(jq 'length' "$TARGETS_FILE")"
-  while IFS= read -r target; do
-    if backup_target "$target"; then ((processed++)) || true; else ((failed++)) || true; fi
-  done < <(jq -c '.[]' "$TARGETS_FILE")
+   local total processed=0 failed=0
+   total="$(jq 'length' "$TARGETS_FILE")"
+   while IFS= read -r target; do
+     if backup_target "$target"; then ((processed++)) || true; else ((failed++)) || true; fi
+   done < <(jq -c '.[]' "$TARGETS_FILE")
 
-   local end_ts; end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
-   if (( failed == 0 )); then
-     tg "[OK] Backup finished @ $end_ts
+    local end_ts end_epoch elapsed_secs elapsed_min elapsed_sec
+    end_ts="$(date '+%Y-%m-%d %H:%M:%S')"
+    end_epoch="$(date '+%s')"
+    elapsed_secs=$((end_epoch - start_epoch))
+    elapsed_min=$((elapsed_secs / 60))
+    elapsed_sec=$((elapsed_secs % 60))
+
+    if (( failed == 0 )); then
+      tg "[OK] Backup finished @ $end_ts
 Processed: $processed / $total
-Failed: $failed"
-   else
-     tg "[ERROR] Backup finished with errors @ $end_ts
+Failed: $failed
+Duration: ${elapsed_min}m ${elapsed_sec}s"
+    else
+      tg "[ERROR] Backup finished with errors @ $end_ts
 Processed: $processed / $total
-Failed: $failed"
-   fi
+Failed: $failed
+Duration: ${elapsed_min}m ${elapsed_sec}s"
+    fi
 }
 main "$@"
 
