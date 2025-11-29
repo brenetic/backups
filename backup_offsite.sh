@@ -11,7 +11,6 @@ source "$SCRIPT_DIR/common.sh"
 
 validate_command restic
 validate_command jq
-validate_command curl WARN
 
 trap on_error ERR INT TERM
 
