@@ -1,37 +1,60 @@
-# Backup Script to Backblaze B2
+# Backup Scripts
 
-This bash script (`backup.sh`) uses restic to create backups to Backblaze B2 cloud storage.
+This repository contains two backup scripts for managing both offsite and local backups:
+- **`backup_offsite.sh`** - Uses restic to create backups to Backblaze B2 cloud storage
+- **`backup_local.sh`** - Uses rsync to create versioned backups to a connected local drive
 
 ## Features
 
-- ✅ **Complete backup runner** - Processes all backup targets in sequence
-- ✅ **Restic integration** - Uses restic for backups to Backblaze B2
-- ✅ **Repository management** - Automatically creates repositories if they don't exist
-- ✅ **Path validation** - Checks if backup paths exist before attempting backup
-- ✅ **Telegram notifications** - Sends notifications with backup summaries per repo
-- ✅ **Retention policies** - Configurable retention with automatic pruning
-- ✅ **Error handling** - Continues with other targets if one fails
-- ✅ **Integrity checks** - Optional weekly integrity checks
+### Common Features
+- **Dual backup support** - Run offsite, local, or both backups per target
+- **Complete backup runner** - Processes all backup targets in sequence
+- **Path validation** - Checks if backup paths exist before attempting backup
+- **Telegram notifications** - Sends notifications with backup summaries
+- **Error handling** - Continues with other targets if one fails
+
+### Offsite Backups (`backup_offsite.sh`)
+- **Restic integration** - Uses restic for backups to Backblaze B2
+- **Repository management** - Automatically creates repositories if they don't exist
+- **Retention policies** - Configurable retention with automatic pruning
+- **Integrity checks** - Optional weekly integrity checks
+
+### Local Backups (`backup_local.sh`)
+- **Rsync-based backups** - Efficient incremental backups to local storage
+- **Soft delete grace period** - Deleted files remain in backup for 60 days
+- **Smart pruning** - Only removes files that no longer exist on source and are older than 60 days
+- **Direct access** - Files stored plaintext on local drive (no encryption overhead)
 
 ## Prerequisites
 
-### 1. Restic Installation (e.g)
-```bash
-curl -L https://github.com/restic/restic/releases/download/v0.16.2/restic_0.16.2_linux_amd64.bz2 | bunzip2 > /usr/local/bin/restic
-chmod +x /usr/local/bin/restic
-```
+### Required Tools
+- **jq** - For JSON parsing
+  ```bash
+  apt-get update && apt-get install -y jq  # Ubuntu/Debian
+  # or
+  brew install jq # Mac OS
+  ```
+- **rsync** - For local backups (usually pre-installed)
+  ```bash
+  apt-get install -y rsync  # Ubuntu/Debian
+  # or
+  brew install rsync # Mac OS
+  ```
 
-### 2. jq Installation (for JSON parsing)
-```bash
-apt-get update && apt-get install -y jq  # Ubuntu/Debian
-# or
-brew install jq # Mac OS
-```
+### For Offsite Backups
+- **Restic** (v0.16.2 or later)
+  ```bash
+  curl -L https://github.com/restic/restic/releases/download/v0.16.2/restic_0.16.2_linux_amd64.bz2 | bunzip2 > /usr/local/bin/restic
+  chmod +x /usr/local/bin/restic
+  ```
+- **Backblaze B2 Account**
+  - Create a Backblaze B2 account
+  - Create a bucket for backups
+  - Generate application keys
 
-### 3. Backblaze B2 Account
-- Create a Backblaze B2 account
-- Create a bucket for backups
-- Generate application keys
+### For Local Backups
+- A connected local storage device (e.g., external hard drive, NAS)
+- Mount point accessible by the backup script (default: `/mnt/backup`)
 
 ## Setup
 
@@ -42,27 +65,33 @@ brew install jq # Mac OS
    ```
 
 2. **Edit `.env` file:**
-   - Set your Backblaze B2 credentials
-   - Set a restic password
+   - For offsite backups: Set your Backblaze B2 credentials and restic password
+   - For local backups: Set `LOCAL_BACKUP_ROOT` to point to your backup storage
    - Configure Telegram notifications (optional)
 
 3. **Edit `targets.json` file:**
-   - Add your backup targets with paths and retention policies
+   - Add your backup targets with paths
+   - Set `offsite: true` for targets you want backed up to Backblaze B2
+   - Set `local: true` for targets you want backed up to local storage
+   - Configure retention policies (for offsite backups only)
 
 ## Configuration
 
 ### Environment Variables
 
-The script reads environment variables from a `.env` file in the same directory. Copy `.env.example` to `.env` and edit the values:
+The scripts read environment variables from a `.env` file in the same directory. Copy `.env.example` to `.env` and edit the values:
 
 ```bash
-# Backblaze B2 (required)
+# Backblaze B2 (required for offsite backups)
 B2_BUCKET_NAME=my-b2-bucket
 B2_ACCOUNT_ID=your_b2_account_id
 B2_ACCOUNT_KEY=your_b2_account_key
 
-# Restic password (required)
+# Restic password (required for offsite backups)
 RESTIC_PASSWORD=supersecret
+
+# Local backup root directory (optional for local backups)
+# LOCAL_BACKUP_ROOT=/mnt/backup
 
 # Telegram notifications (optional)
 # TELEGRAM_BOT_TOKEN=123456:ABCDEF...
@@ -75,33 +104,50 @@ RESTIC_PASSWORD=supersecret
 
 ### Backup Targets Configuration
 
-Create a `targets.json` file in the same directory as `backup.sh` with your backup targets. Copy `targets.example.json` to `targets.json` and edit it.
+Create a `targets.json` file in the same directory as the scripts with your backup targets. Copy `targets.example.json` to `targets.json` and edit it.
 
 Example `targets.json`:
 
 ```json
 [
   {
-    "repo": "documents",
+    "name": "documents",
     "enabled": true,
     "locations": ["/home/user/Documents", "/home/user/Desktop"],
+    "offsite": true,
+    "local": true,
     "retention": { "keepWithin": "1m" },
-    "checkWeekly": true
+    "checkWeekly": false
   },
   {
-    "repo": "photos",
+    "name": "photos",
     "enabled": true,
     "locations": ["/home/user/Pictures"],
-    "retention": { "keepLast": 10, "keepDaily": 7 }
+    "offsite": true,
+    "local": false,
+    "retention": { "keepLast": 10, "keepDaily": 7 },
+    "checkWeekly": false
+  },
+  {
+    "name": "local_only",
+    "enabled": true,
+    "locations": ["/home/user/Projects"],
+    "offsite": false,
+    "local": true,
+    "checkWeekly": false
   }
 ]
 ```
 
-- `repo`: Unique name for the restic repository (required)
+#### Target Configuration Fields
+
+- `name`: Unique name for the backup target (required)
 - `enabled`: Set to `true` to include this target in backups (default: true)
 - `locations`: Array of paths to backup (required, can be strings or objects with "path" key)
-- `retention`: Retention policy for pruning old backups (optional, defaults to keep within 1 month)
-- `checkWeekly`: Run integrity check every Sunday (optional, default: false)
+- `offsite`: Set to `true` to backup to Backblaze B2 via `backup_offsite.sh` (default: false)
+- `local`: Set to `true` to backup to local storage via `backup_local.sh` (default: false)
+- `retention`: Retention policy for pruning old backups (offsite only, optional, defaults to keep within 1 month)
+- `checkWeekly`: Run integrity check every Sunday (offsite only, optional, default: false)
 
 ### Retention Policies
 
@@ -122,33 +168,59 @@ Example: `{"keepDaily": 7, "keepWeekly": 4, "keepMonthly": 12}`
 ### Direct Execution
 
 ```bash
-# Make script executable
-chmod +x backup.sh
+# Make scripts executable (if not already)
+chmod +x backup_offsite.sh backup_local.sh
 
-# Run the backup
-./backup.sh
+# Run offsite backups (to Backblaze B2)
+./backup_offsite.sh
+
+# Run local backups (to connected local drive)
+./backup_local.sh
+
+# Run both (in sequence)
+./backup_offsite.sh && ./backup_local.sh
 ```
 
 ### Automation Integration
 
 Cron is probably easiest. Alternatives could also be n8N or a CI/CD pipeline.
 
-The script reads configuration from `.env` and `targets.json` in its directory.
+The scripts read configuration from `.env` and `targets.json` in their directory.
+
+#### Example Cron Setup
+
+```bash
+# Run offsite backups daily at 2 AM
+0 2 * * * /path/to/backup_offsite.sh
+
+# Run local backups daily at 3 AM
+0 3 * * * /path/to/backup_local.sh
+
+# Or run both together
+0 2 * * * /path/to/backup_offsite.sh && /path/to/backup_local.sh
+```
 
 ## Output and Notifications
 
-Current output:
+Both scripts provide:
 
 - **Console logging** - Detailed progress information to stderr
 - **Telegram notifications** - Real-time updates for each backup operation
 
-Example notification flow:
+### Offsite Backup Notifications
 1. Backup started
 2. Repository initialization (if needed)
-3. Backup completion for each repo with summary
-4. Retention policy application for each repo
+3. Backup completion for each target with summary
+4. Retention policy application for each target
 5. Weekly integrity check (if enabled and on Sunday)
 6. Final completion summary
+
+### Local Backup Notifications
+1. Backup started (with local backup root path)
+2. Backup completion for each target with rsync summary
+3. Pruning of old files that no longer exist on source (older than 60 days)
+4. Count of deleted old files
+5. Final completion summary
 
 ## Error Handling
 

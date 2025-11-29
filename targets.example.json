@@ -1,9 +1,28 @@
 [
   {
-    "repo": "test",
+    "name": "documents",
     "enabled": true,
-    "locations": ["/path/to/files"],
+    "locations": ["/home/user/Documents", "/home/user/Desktop"],
+    "offsite": true,
+    "local": true,
     "retention": { "keepWithin": "1m" },
-    "checkWeekly": true
+    "checkWeekly": false
+  },
+  {
+    "name": "photos",
+    "enabled": true,
+    "locations": ["/home/user/Pictures"],
+    "offsite": true,
+    "local": false,
+    "retention": { "keepLast": 10, "keepDaily": 7 },
+    "checkWeekly": false
+  },
+  {
+    "name": "local_only",
+    "enabled": true,
+    "locations": ["/home/user/Projects"],
+    "offsite": false,
+    "local": true,
+    "checkWeekly": false
   }
 ]
