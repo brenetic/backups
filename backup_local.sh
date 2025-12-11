@@ -4,8 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-: "${LOCAL_BACKUP_ROOT:?LOCAL_BACKUP_ROOT is required}"
-
 validate_command rsync
 validate_command jq
 
@@ -47,10 +45,11 @@ prune_old_backups() {
 
 backup_target() {
   local target_json="$1"
-  local name enabled local_enabled
+  local name enabled local_enabled local_destination
   name="$(echo "$target_json"    | jq -r '.name')"
   enabled="$(echo "$target_json" | jq -r '.enabled // true')"
   local_enabled="$(echo "$target_json" | jq -r '.local // false')"
+  local_destination="$(echo "$target_json" | jq -r '.local_destination // empty')"
 
   [[ "$enabled" != "true" ]] && { echo "[SKIP] $name (disabled)" >&2; return 0; }
   [[ "$local_enabled" != "true" ]] && { echo "[SKIP] $name (local backup disabled)" >&2; return 0; }
@@ -62,9 +61,13 @@ backup_target() {
   done < <(echo "$target_json" | jq -r '.locations[] | if type=="string" then . else .path end')
    [[ ${#paths[@]} -eq 0 ]] && { tg "[WARN] No valid paths for local backup $name -- skipping"; return 0; }
 
-  # Just in case
-  mkdir -p "$LOCAL_BACKUP_ROOT"
-  local target_backup_dir="${LOCAL_BACKUP_ROOT}/${name}"
+  if [[ -z "$local_destination" ]]; then
+    tg "[ERROR] Target '$name' has local backup enabled but no local_destination specified"
+    return 1
+  fi
+
+  mkdir -p "$local_destination"
+  local target_backup_dir="${local_destination}/${name}"
   mkdir -p "$target_backup_dir"
 
     tg "[BACKUP] Local backup -> $name
@@ -95,8 +98,7 @@ main() {
    local start_ts start_epoch
    start_ts="$(date '+%Y-%m-%d %H:%M:%S')"
    start_epoch="$(date '+%s')"
-   tg "[START] Local backup started @ $start_ts on $HOSTNAME_SHORT
-[INFO] Backup root: $LOCAL_BACKUP_ROOT"
+   tg "[START] Local backup started @ $start_ts on $HOSTNAME_SHORT"
 
    local total processed=0 failed=0
    total="$(jq 'length' "$TARGETS_FILE")"

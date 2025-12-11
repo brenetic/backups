@@ -4,7 +4,7 @@
     "enabled": true,
     "locations": ["/home/user/Documents", "/home/user/Desktop"],
     "offsite": true,
-    "local": true,
+    "local": false,
     "retention": { "keepWithin": "1m" },
     "checkWeekly": false
   },
@@ -12,8 +12,9 @@
     "name": "photos",
     "enabled": true,
     "locations": ["/home/user/Pictures"],
+    "local_destination": "/mnt/external/backups",
     "offsite": true,
-    "local": false,
+    "local": true,
     "retention": { "keepLast": 10, "keepDaily": 7 },
     "checkWeekly": false
   },
@@ -21,6 +22,7 @@
     "name": "local_only",
     "enabled": true,
     "locations": ["/home/user/Projects"],
+    "local_destination": "/mnt/secondary/projects_backup",
     "offsite": false,
     "local": true,
     "checkWeekly": false

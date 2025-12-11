@@ -66,7 +66,6 @@ This repository contains two backup scripts for managing both offsite and local 
 
 2. **Edit `.env` file:**
    - For offsite backups: Set your Backblaze B2 credentials and restic password
-   - For local backups: Set `LOCAL_BACKUP_ROOT` to point to your backup storage
    - Configure Telegram notifications (optional)
 
 3. **Edit `targets.json` file:**
@@ -89,9 +88,6 @@ B2_ACCOUNT_KEY=your_b2_account_key
 
 # Restic password (required for offsite backups)
 RESTIC_PASSWORD=supersecret
-
-# Local backup root directory (optional for local backups)
-# LOCAL_BACKUP_ROOT=/mnt/backup
 
 # Telegram notifications (optional)
 # TELEGRAM_BOT_TOKEN=123456:ABCDEF...
